@@ -23,8 +23,8 @@
 #define DEKORATORTHEMES_H
 
 #include "kthemeselector.h"
-class KAboutData;
-class KComponentData;
+
+#include <KAboutData>
 
 
 class deKoratorThemes : public KThemeSelector
@@ -40,30 +40,29 @@ class deKoratorThemes : public KThemeSelector
         };
 
     public:
-        explicit deKoratorThemes(QWidget *parent = 0);
-        ~deKoratorThemes();
+        explicit deKoratorThemes(QWidget *parent = nullptr);
+        ~deKoratorThemes() override;
 
     public:
-        QString installTheme(const KUrl &themeUrl);
+        QString installTheme(const QUrl &themeUrl) override;
 
     protected:
-        virtual bool isValidTheme(const QString &localPath) const;
-        virtual QString themeName(const QString &localPath) const;
+        bool isValidTheme(const QString &localPath) const override;
+        QString themeName(const QString &localPath) const override;
 
-        virtual int viewModes() const;
-        virtual QString viewModeLabel(int viewMode) const;
-        virtual void paintThemeItem(QPainter *painter, const QStyleOptionViewItem *option,
-                                    const QString &localPath, int viewMode) const;
-        virtual QSize sizeHintThemeItem(const QStyleOptionViewItem *option,
-                                        const QString &localPath, int viewMode) const;
+        int viewModes() const override;
+        QString viewModeLabel(int viewMode) const override;
+        void paintThemeItem(QPainter *painter, const QStyleOptionViewItem *option,
+                            const QString &localPath, int viewMode) const override;
+        QSize sizeHintThemeItem(const QStyleOptionViewItem *option,
+                                const QString &localPath, int viewMode) const override;
 
     private:
         bool installThemes(const QStringList &themes, const QString &archiveName);
         QStringList findThemeDirs(const QString &archiveName);
 
     private:
-        KAboutData *aboutData;
-        KComponentData *componentData;
+        KAboutData aboutData;
 };
 
 #endif

@@ -3,18 +3,27 @@
  <class>KThemeSelectorWidgets</class>
  <widget class="QWidget" name="KThemeSelectorWidgets">
   <layout class="QHBoxLayout" name="horizontalLayout_2">
-   <property name="margin">
-    <number>0</number>
-   </property>
+   <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
    <item>
     <layout class="QVBoxLayout" name="verticalLayout">
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout">
        <item>
-        <widget class="KLineEdit" name="m_editFilter"/>
+        <widget class="QLineEdit" name="m_editFilter"/>
        </item>
        <item>
-        <widget class="KComboBox" name="m_viewModeChooser"/>
+        <widget class="QComboBox" name="m_viewModeChooser"/>
        </item>
       </layout>
      </item>
@@ -84,18 +93,6 @@
    </item>
   </layout>
  </widget>
- <customwidgets>
-  <customwidget>
-   <class>KComboBox</class>
-   <extends>QComboBox</extends>
-   <header location="global">KDE/KComboBox</header>
-  </customwidget>
-  <customwidget>
-   <class>KLineEdit</class>
-   <extends>QLineEdit</extends>
-   <header location="global">KDE/KLineEdit</header>
-  </customwidget>
- </customwidgets>
  <resources/>
  <connections/>
 </ui>

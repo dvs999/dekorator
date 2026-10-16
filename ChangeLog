@@ -1,3 +1,18 @@
+2026-10-16
+
+        * deKorator: port to Qt 6, KDE Frameworks 6 and KDecoration3 (Plasma 6).
+        * deKoratorclient.cc: rewrite the KWin glue on top of KDecoration3, the
+            theme images are now shared by all decorations in Theme.
+        * deKoratorclient.cc: fall back to the installed Default theme when the
+            configured theme does not exist.
+        * deKoratorclient.cc: drop QImageBlitz, implement the button effects
+            locally; Blend and Solarize animations work again.
+        * deKoratorconfig.cc: port to KCModule, notify KWin after saving, store
+            untranslated keys for the combo box settings.
+        * themes: port the theme selector to KNewStuff 6, KIO and KArchive of KF6.
+        * install the Default theme.
+
+
 2009-02-16, christoph
 
         * deKorator: add new theme selector with previews

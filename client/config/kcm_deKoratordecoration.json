@@ -1,0 +1,7 @@
+{
+    "KPlugin": {
+        "Name": "deKorator Window Decoration",
+        "Description": "Configure the deKorator window decoration and its themes",
+        "Icon": "preferences-system-windows"
+    }
+}

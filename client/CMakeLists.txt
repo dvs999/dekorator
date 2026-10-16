@@ -1,11 +1,14 @@
-project (kwin-deKorator)
+kcoreaddons_add_plugin(org.kde.deKorator
+    SOURCES deKoratorclient.cc shadow.cpp
+    INSTALL_NAMESPACE "org.kde.kdecoration3"
+)
+target_link_libraries(org.kde.deKorator
+    KDecoration3::KDecoration
+    KF6::ConfigGui
+    KF6::CoreAddons
+    KF6::I18n
+    KF6::IconThemes
+    Qt6::Gui
+)
 
-set (kwin_deKorator_SOURCES deKoratorclient.cc shadow.cpp)
-
-kde4_add_plugin (kwin3_deKorator ${kwin_deKorator_SOURCES})
-target_link_libraries (kwin3_deKorator ${KDE4_KDEUI_LIBS} ${QIMAGEBLITZ_LIBRARIES} kdecorations)
-install (TARGETS kwin3_deKorator DESTINATION ${PLUGIN_INSTALL_DIR})
-install (FILES deKorator.desktop DESTINATION ${DATA_INSTALL_DIR}/kwin)
-
-add_subdirectory (config)
-
+add_subdirectory(config)

@@ -34,42 +34,42 @@
 #ifndef DEKORATORCONFIG_H
 #define DEKORATORCONFIG_H
 
-#include <QtGui/QWidget>
+#include <KCModule>
+#include <KSharedConfig>
+
+#include <QWidget>
 
 #include "ui_configdialog.h"
 
-class KConfig;
 class deKoratorThemes;
-class QListWidgetItem;
 
 
 class ConfigDialog : public QWidget, public Ui::ConfigDialog
 {
-	Q_OBJECT
+    Q_OBJECT
 
-	public:
-		explicit ConfigDialog(QWidget *parent = 0) : QWidget(parent) { setupUi(this); vboxLayout->setMargin(0); }
+public:
+    explicit ConfigDialog( QWidget *parent = nullptr ) : QWidget( parent )
+    {
+        setupUi( this );
+        layout()->setContentsMargins( 0, 0, 0, 0 );
+    }
 };
 
 
-class DeKoratorConfig : public QObject
+class DeKoratorConfig : public KCModule
 {
     Q_OBJECT
 public:
-    DeKoratorConfig( KConfig* config, QWidget* parent );
-    ~DeKoratorConfig();
+    DeKoratorConfig( QObject *parent, const KPluginMetaData &data );
 
-signals:
-    void changed();
-
-public slots:
-    void load( const KConfigGroup &conf);
-    void save( KConfigGroup &conf );
-    void defaults();
-
+public Q_SLOTS:
+    void load() override;
+    void save() override;
+    void defaults() override;
 
 private:
-    KConfig *config_;
+    KSharedConfig::Ptr config_;
     deKoratorThemes *m_themes;
     ConfigDialog *dialog_;
 };

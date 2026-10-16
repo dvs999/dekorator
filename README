@@ -1,3 +1,58 @@
-This is the initial KDE4 port of deKorator, see original README
+deKorator - themable window decoration for KDE Plasma 6
+=======================================================
 
-Christoph Feck <christoph@maxiom.de>
+This is the Plasma 6 (Qt 6 / KDE Frameworks 6 / KDecoration3) port of
+deKorator. For the history of the project see README.original and ChangeLog.
+
+Requirements
+------------
+
+- Qt >= 6.6 (Core, DBus, Gui, Widgets)
+- KDE Frameworks >= 6.5 (Archive, Config, CoreAddons, I18n, IconThemes,
+  KCMUtils, KIO, NewStuff, WidgetsAddons, XmlGui) and extra-cmake-modules
+- KDecoration3 (Plasma 6.3 or later)
+
+Building and installing
+-----------------------
+
+    cmake -S . -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release
+    cmake --build build
+    sudo cmake --install build
+
+Then restart KWin (log out and back in, or run "kwin_wayland --replace &"
+on Wayland) and choose "DeKorator" in System Settings > Colors & Themes >
+Window Decorations. The pencil/configure button opens the deKorator
+settings, where themes are selected, installed from archives, or downloaded
+with "Get New Themes...".
+
+Installed files:
+
+- lib/qt6/plugins/org.kde.kdecoration3/org.kde.deKorator.so  (decoration)
+- lib/qt6/plugins/org.kde.kdecoration3.kcm/kcm_deKoratordecoration.so  (settings)
+- share/deKorator/themes/Default-theme  (the default theme)
+- share/knsrcfiles/deKoratorthemes.knsrc
+
+Themes
+------
+
+Themes are looked up in deKorator/themes below the XDG data directories,
+i.e. ~/.local/share/deKorator/themes and /usr/share/deKorator/themes. More
+themes are in themesStuff/. If the configured theme cannot be found (for
+example with a config file from KDE 4) the Default theme is used.
+
+Settings are stored in ~/.config/kwindeKoratorrc, with the same keys as in
+KDE 4, so an old configuration can be copied over.
+
+Changes compared to the KDE 4 version
+-------------------------------------
+
+- "Close window by double clicking the menu button" is now the global
+  KWin setting (Window Decorations > Titlebar Buttons), so the deKorator
+  option is hidden.
+- The pointing hand cursor over buttons is no longer supported, KDecoration3
+  has no API for decoration cursors.
+- Corner masks are implemented by clipping the painting, so masked corners
+  are transparent (needs compositing, which is always on in Plasma 6).
+- The window tab close button is gone, Plasma 6 has no window tabs.
+- The "Blend" and "Solarize" button animations work again (they were
+  disabled in the KDE 4 port), and QImageBlitz is no longer needed.

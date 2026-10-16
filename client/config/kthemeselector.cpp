@@ -36,29 +36,23 @@
 #include "kthemeselector.h"
 #include "kthemeselector_p.h"
 
-#include <KDE/KAboutData>
-#include <KDE/KHelpMenu>
-#include <KDE/KLocale>
-#include <KDE/KMessageBox>
-#include <KDE/KStandardDirs>
-#include <KDE/KUrl>
-#include <KDE/KUrlRequesterDialog>
+#include <KAboutData>
+#include <KHelpMenu>
+#include <KLocalizedString>
+#include <KMessageBox>
+#include <KUrlRequesterDialog>
 
-#include <KDE/KIO/Job>
-#include <KDE/KIO/NetAccess>
+#include <KNSWidgets/Dialog>
 
-#include <kdeversion.h>
-
-#if KDE_IS_VERSION(4, 4, 0)
-#include <KDE/KNS3/DownloadDialog>
-#else
-#include <KDE/KNS/Engine>
-#endif
-
-#include <QtCore/QDir>
-#include <QtCore/QFileInfo>
-#include <QtGui/QPainter>
-#include <QtGui/QStyle>
+#include <QApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QMenu>
+#include <QPainter>
+#include <QPointer>
+#include <QStandardPaths>
+#include <QStyle>
+#include <QUrl>
 
 
 /*------------------------------------------------------------------------*/
@@ -74,14 +68,8 @@ void KThemeSelectorDelegate::paint(QPainter *painter, const QStyleOptionViewItem
 {
     painter->save();
     // paint styled background
-    QStyle *style = QApplication::style();
-    if (option.version >= 3) {
-        const QWidget *widget = qobject_cast<const QWidget *>(((const QStyleOptionViewItemV3 *) &option)->widget);
-        if (widget) {
-            style = widget->style();
-        }
-    }
-    style->drawPrimitive(QStyle::PE_PanelItemViewItem, &option, painter, 0);
+    QStyle *style = option.widget ? option.widget->style() : QApplication::style();
+    style->drawPrimitive(QStyle::PE_PanelItemViewItem, &option, painter, option.widget);
     QString localPath = index.data().toString();
 
     if (selector) {
@@ -144,31 +132,30 @@ void KThemeSelector::Private::setup(KThemeSelector *widget)
         m_viewModeChooser->setVisible(false);
     }
 
-    connect(m_editFilter, SIGNAL(textChanged(QString)), SLOT(filterChanged(QString)));
-    connect(m_buttonConfigure, SIGNAL(clicked()), SLOT(configureClicked()));
-    connect(m_buttonInstall, SIGNAL(clicked()), SLOT(installClicked()));
-    connect(m_buttonGetNew, SIGNAL(clicked()), SLOT(getNewClicked()));
-    connect(m_buttonRemove, SIGNAL(clicked()), SLOT(removeClicked()));
-    connect(m_buttonCreate, SIGNAL(clicked()), widget, SIGNAL(createClicked()));
-    connect(m_view, SIGNAL(itemSelectionChanged()), SLOT(selectionChanged()));
-    connect(m_viewModeChooser, SIGNAL(currentIndexChanged(int)), SLOT(setViewMode(int)));
+    connect(m_editFilter, &QLineEdit::textChanged, this, &Private::filterChanged);
+    connect(m_buttonConfigure, &QPushButton::clicked, this, &Private::configureClicked);
+    connect(m_buttonInstall, &QPushButton::clicked, this, &Private::installClicked);
+    connect(m_buttonGetNew, &QPushButton::clicked, this, &Private::getNewClicked);
+    connect(m_buttonRemove, &QPushButton::clicked, this, &Private::removeClicked);
+    connect(m_buttonCreate, &QPushButton::clicked, widget, &KThemeSelector::createClicked);
+    connect(m_view, &QListWidget::itemSelectionChanged, this, &Private::selectionChanged);
+    connect(m_viewModeChooser, &QComboBox::currentIndexChanged, this, &Private::setViewMode);
 
     m_view->setUniformItemSizes(true);
     m_view->setItemDelegate(m_delegate);
     m_view->setMinimumWidth(330);
 
-    m_editFilter->setClickMessage(i18n("Filter Themes"));
-    m_editFilter->setClearButtonShown(true);
+    m_editFilter->setPlaceholderText(i18n("Filter Themes"));
+    m_editFilter->setClearButtonEnabled(true);
     m_editFilter->setVisible(false);
 
     m_buttonConfigure->setVisible(false);
     m_buttonConfigure->setEnabled(false);
     m_buttonRemove->setEnabled(false);
     m_buttonGetNew->setVisible(false);
-    KHelpMenu *helpMenu = new KHelpMenu(m_buttonAbout, m_componentData.aboutData());
-    QMenu *menu = (QMenu *) helpMenu->menu();
-    m_buttonAbout->setMenu(menu);
-    m_buttonAbout->setText(i18n("About %1", m_componentData.aboutData()->appName()));
+    KHelpMenu *helpMenu = new KHelpMenu(m_buttonAbout, m_aboutData);
+    m_buttonAbout->setMenu(helpMenu->menu());
+    m_buttonAbout->setText(i18n("About %1", m_aboutData.displayName()));
 
     m_parent->rescanThemes();
 }
@@ -211,9 +198,9 @@ void KThemeSelector::Private::configureClicked()
 
 void KThemeSelector::Private::installClicked()
 {
-    KUrl themeUrl = KUrlRequesterDialog::getUrl(QString(), m_parent, i18n("Drag or Type Theme URL"));
+    QUrl themeUrl = KUrlRequesterDialog::getUrl(QUrl(), m_parent, i18n("Drag or Type Theme URL"));
 
-    if (themeUrl.url().isEmpty()) {
+    if (themeUrl.isEmpty()) {
         return;
     }
     QString installed = m_parent->installTheme(themeUrl);
@@ -257,11 +244,11 @@ void KThemeSelector::Private::removeClicked()
 
 void KThemeSelector::Private::postInstallFiles(const QStringList &files)
 {
-    foreach (const QString &file, files) {
+    for (const QString &file : files) {
         if (file.endsWith(QLatin1String(".tar.bz2"), Qt::CaseInsensitive)
             || file.endsWith(QLatin1String(".tar.gz"), Qt::CaseInsensitive)
             || file.endsWith(QLatin1String(".tar.xz"), Qt::CaseInsensitive)) {
-            QString installed = m_parent->installTheme(file);
+            QString installed = m_parent->installTheme(QUrl::fromLocalFile(file));
             if (!installed.isEmpty()) {
                 setSelected(installed);
             }
@@ -272,37 +259,21 @@ void KThemeSelector::Private::postInstallFiles(const QStringList &files)
 
 void KThemeSelector::Private::getNewClicked()
 {
-#if KDE_IS_VERSION(4, 4, 0)
-    QPointer<KNS3::DownloadDialog> dialog = new KNS3::DownloadDialog(m_configFileKNS, m_parent);
+    QPointer<KNSWidgets::Dialog> dialog = new KNSWidgets::Dialog(m_configFileKNS, m_parent);
+    dialog->exec();
 
-    if (dialog->exec()) {
-        KNS3::Entry::List entries = dialog->changedEntries();
-        if (entries.size() > 0) {
-            KNS3::Entry::List entries = dialog->installedEntries();
-            if (entries.size() > 0) {
-                foreach (const KNS3::Entry &entry, entries) {
+    if (dialog) {
+        const QList<KNSCore::Entry> entries = dialog->changedEntries();
+        if (!entries.isEmpty()) {
+            for (const KNSCore::Entry &entry : entries) {
+                if (entry.status() == KNSCore::Entry::Installed) {
                     postInstallFiles(entry.installedFiles());
                 }
             }
             m_parent->rescanThemes();
         }
+        delete dialog;
     }
-    delete dialog;
-#else
-    KNS::Engine engine(m_parent);
-
-    if (engine.init(m_configFileKNS)) {
-        KNS::Entry::List entries = engine.downloadDialogModal(m_parent);
-        if (entries.size() > 0) {
-            foreach (KNS::Entry *entry, entries) {
-                if (entry->status() == KNS::Entry::Installed) {
-                    postInstallFiles(entry->installedFiles());
-                }
-            }
-            m_parent->rescanThemes();
-        }
-    }
-#endif
 }
 
 
@@ -336,7 +307,7 @@ void KThemeSelector::Private::selectionChanged()
 KThemeSelector::KThemeSelector(QWidget *parent)
     : QWidget(parent), d(new Private)
 {
-    d->m_componentData = KGlobal::mainComponent();
+    d->m_aboutData = KAboutData::applicationData();
 }
 
 
@@ -346,9 +317,9 @@ KThemeSelector::~KThemeSelector()
 }
 
 
-void KThemeSelector::setup(const KComponentData &componentData)
+void KThemeSelector::setup(const KAboutData &aboutData)
 {
-    d->m_componentData = componentData;
+    d->m_aboutData = aboutData;
     d->setup(this);
 }
 
@@ -444,8 +415,8 @@ QByteArray KThemeSelector::saveState() const
     const int version = 1;
     QByteArray state;
 
-    state.append(version);
-    state.append(d->m_viewMode);
+    state.append(char(version));
+    state.append(char(d->m_viewMode));
     state.append(d->m_editFilter->text().toUtf8());
     return state;
 }
@@ -472,18 +443,18 @@ void KThemeSelector::rescanThemes()
     if (!newThemes.contains(d->m_selected)) {
         d->setSelected(QString());
     }
-    foreach (const QString &theme, newThemes) {
+    for (const QString &theme : std::as_const(newThemes)) {
         if (!oldThemes.contains(theme)) {
             d->m_view->addItem(theme);
-            emit themeInstalled(theme);
+            Q_EMIT themeInstalled(theme);
         }
     }
-    foreach (const QString &theme, oldThemes) {
+    for (const QString &theme : std::as_const(oldThemes)) {
         if (!newThemes.contains(theme)) {
             QList<QListWidgetItem *> items = d->m_view->findItems(theme, Qt::MatchExactly);
             if (!items.isEmpty()) {
-                d->m_view->takeItem(d->m_view->row(items.at(0)));
-                emit themeRemoved(theme);
+                delete d->m_view->takeItem(d->m_view->row(items.at(0)));
+                Q_EMIT themeRemoved(theme);
             }
         }
     }
@@ -501,7 +472,7 @@ void KThemeSelector::rescanThemes()
  *
  */
 
-QString KThemeSelector::installTheme(const KUrl &themeUrl)
+QString KThemeSelector::installTheme(const QUrl &themeUrl)
 {
     // TODO
     return themeUrl.url();
@@ -510,34 +481,35 @@ QString KThemeSelector::installTheme(const KUrl &themeUrl)
 
 bool KThemeSelector::removeTheme(const QString &localPath)
 {
-    KIO::NetAccess::del(KUrl(localPath), this);
-    return true;
+    return QDir(localPath).removeRecursively();
 }
 
 
 void KThemeSelector::addTheme(const QString &localPath)
 {
+    Q_UNUSED(localPath);
     // TODO
 }
 
 
 QStringList KThemeSelector::scanInstalledThemes()
 {
-    QStringList directories = d->m_componentData.dirs()->findDirs("appdata", "themes");
+    QStringList directories = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation,
+            d->m_aboutData.componentName() + QLatin1String("/themes"), QStandardPaths::LocateDirectory);
     QStringList themes;
 
-    foreach (const QString &directory, directories) {
+    for (const QString &directory : std::as_const(directories)) {
         QDir dir(directory);
-        QStringList entries = dir.entryList(QDir::Dirs | QDir::Files | QDir::Readable | QDir::NoDotAndDotDot);
-        foreach (const QString &entry, entries) {
+        const QStringList entries = dir.entryList(QDir::Dirs | QDir::Files | QDir::Readable | QDir::NoDotAndDotDot);
+        for (const QString &entry : entries) {
             QString localPath = dir.absoluteFilePath(entry);
             if (isValidTheme(localPath)) {
                 themes.append(localPath);
             }
             if (true) {
                 QDir dir(localPath);
-                QStringList entries = dir.entryList(QDir::Dirs | QDir::Files | QDir::Readable | QDir::NoDotAndDotDot);
-                foreach (const QString &entry, entries) {
+                const QStringList entries = dir.entryList(QDir::Dirs | QDir::Files | QDir::Readable | QDir::NoDotAndDotDot);
+                for (const QString &entry : entries) {
                     QString localPath = dir.absoluteFilePath(entry);
                     if (isValidTheme(localPath)) {
                         themes.append(localPath);
@@ -560,7 +532,7 @@ bool KThemeSelector::isValidTheme(const QString &localPath) const
 QString KThemeSelector::themeName(const QString &localPath) const
 {
     QFileInfo info(localPath);
-    QString name = info.fileName().replace(QChar('_', 0), QChar(' ', 0));
+    QString name = info.fileName().replace(QLatin1Char('_'), QLatin1Char(' '));
     name[0] = name[0].toUpper();
     return name;
 }
@@ -572,8 +544,8 @@ bool KThemeSelector::hasProperty(const QString &localPath, Property property) co
         case Configurable:
             return true;
         case Removable:
-            // TODO check actual permissions...
-            return localPath.contains(QString::fromUtf8("/home/"));
+            // only themes installed by the user can be removed
+            return localPath.startsWith(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/'));
         // no default; warn when new properties are added
     }
     return false;

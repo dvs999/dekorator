@@ -24,8 +24,8 @@
 
 #include "kthemeselector.h"
 #include "ui_kthemeselectorwidgets.h"
-#include <KDE/KComponentData>
-#include <QtGui/QStyledItemDelegate>
+#include <KAboutData>
+#include <QStyledItemDelegate>
 
 
 class KThemeSelectorDelegate : public QStyledItemDelegate
@@ -33,11 +33,11 @@ class KThemeSelectorDelegate : public QStyledItemDelegate
     Q_OBJECT
 
     public:
-        KThemeSelectorDelegate(QObject *parent = 0);
+        explicit KThemeSelectorDelegate(QObject *parent = nullptr);
 
     public:
-        virtual void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const;
-        virtual QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const;
+        void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+        QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 
     public:
         KThemeSelector *selector;
@@ -49,11 +49,11 @@ class KThemeSelector::Private : public QObject, public Ui::KThemeSelectorWidgets
     Q_OBJECT
 
     public:
-        Private(QObject *parent = 0);
-        virtual ~Private();
+        explicit Private(QObject *parent = nullptr);
+        ~Private() override;
 
         KThemeSelector *m_parent;
-        KComponentData m_componentData;
+        KAboutData m_aboutData;
         QString m_configFileKNS;
 
         QStringList m_themes;

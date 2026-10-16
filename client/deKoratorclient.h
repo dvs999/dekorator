@@ -35,23 +35,26 @@
 #ifndef DEKORATORCLIENT_H
 #define DEKORATORCLIENT_H
 
-#include <kdecorationfactory.h>
-#include <kdecoration.h>
+#include <KDecoration3/Decoration>
+#include <KDecoration3/DecorationButton>
+#include <KDecoration3/DecorationButtonGroup>
 
-#include <QtGui/QAbstractButton>
-#include <QtGui/QBitmap>
-#include <QtGui/QImage>
+#include <QColor>
+#include <QHash>
+#include <QImage>
+#include <QList>
+#include <QPixmap>
+#include <QPoint>
+#include <QRegion>
+#include <QVariant>
 
-class QBoxLayout;
-class QHBoxLayout;
-class QSpacerItem;
-class QVBoxLayout;
+#include <memory>
+
+class QTimer;
 
 
 namespace DeKorator
 {
-
-class DeKoratorClient;
 
 enum decoType {
     topLeftCorner = 0,
@@ -92,26 +95,6 @@ enum buttonTypeAll {
     buttonTypeAllCount
 };
 
-enum ButtonType {
-    ButtonHelp = 0,
-    ButtonMax,
-    ButtonMin,
-    ButtonClose,
-    ButtonMenu,
-    ButtonSticky,
-    ButtonAbove,
-    ButtonBelow,
-    ButtonShade,
-    ButtonTabClose,
-    ButtonTypeCount
-};
-
-enum ImageType {
-    ImageOriginal,
-    ImageRecolored,
-    ImageTypeCount
-};
-
 enum buttonState {
     regular = 0,
     hover,
@@ -125,174 +108,176 @@ enum WindowActivationState {
     WindowActivationStateCount
 };
 
-// DeKoratorFactory /////////////////////////////////////////////////////////////
-
-class DeKoratorFactory: public KDecorationFactory
-{
-public:
-    DeKoratorFactory();
-    virtual ~DeKoratorFactory();
-    virtual KDecoration *createDecoration( KDecorationBridge *b );
-    virtual bool reset( unsigned long changed );
-    virtual bool supports( KDecorationDefines::Ability ) const;
-    static QImage colorizedImage( const QImage &image, QColor color, QString colorizeMethod );
-    QBitmap topLeftCornerBitmap_, topMidBitmap_, topRightCornerBitmap_, bottomLeftCornerBitmap_, bottomMidBitmap_, bottomRightCornerBitmap_;
-
-private:
-    bool readConfig();
-    void loadPixmaps();
-    void colorizeDecoPixmaps( bool isActive );
-    void colorizeButtonsPixmaps( bool isActive );
-    void chooseRightPixmaps();
-    void determineSizes();
-    void prepareDecoWithBgCol();
-
-private:
-
-    bool colorizeActFrames_;
-    bool colorizeInActFrames_;
-    bool needInit_;
-    bool needReload_;
-    QString framesPath_;
-    QString buttonsPath_;
-    QString masksPath_;
-public:
-    bool useCustomButtonsColors_;
-    bool customColorsActiveButtons_;
-    bool customColorsInActiveButtons_;
-    bool colorizeActButtons_;
-    bool colorizeInActButtons_;
-    QColor cusBtnCol_[ buttonTypeAllCount ];
-    QImage decoImage[ decoCount ][ WindowActivationStateCount ][ ImageTypeCount ];
-    QImage buttonImage[ buttonTypeAllCount ][ buttonStateCount ][ WindowActivationStateCount ][ ImageTypeCount ];
+enum maskType {
+    topLeftMask = 0,
+    topMidMask,
+    topRightMask,
+    bottomLeftMask,
+    bottomMidMask,
+    bottomRightMask,
+    maskCount
 };
 
+// Settings /////////////////////////////////////////////////////////////////
+// everything read from kwindeKoratorrc
 
+struct Settings
+{
+    void read();
+    bool operator==( const Settings &other ) const = default;
 
+    // misc
+    Qt::Alignment titleAlign = Qt::AlignHCenter;
+    bool useMenuImage = false;
+    bool ignoreAppIconCol = false;
+    bool showBtmBorder = false;
+    bool showMaximizedBorders = false;
+    bool useShdText = false;
+    QPoint activeShdTextOffset;
+    QColor activeShadowColor = QColor( 150, 150, 150 );
+    QPoint inActiveShdTextOffset;
+    QColor inActiveShadowColor = QColor( 150, 150, 150 );
+    QPoint btnShift;
 
+    // colors
+    bool colorizeActFrames = false;
+    bool colorizeActButtons = false;
+    bool colorizeInActFrames = false;
+    bool colorizeInActButtons = false;
+    bool useAnimation = false;
+    QString animationType = QStringLiteral( "Intensity" );
+    int animSteps = 5;
+    int animInterval = 30;
+    bool keepAnimating = false;
+    QString buttonHoverType = QStringLiteral( "To Gray" );
+    float effectAmount = 0.5;
+    QColor activeHighlightColor = QColor( 150, 150, 150 );
+    QColor inActiveHighlightColor = QColor( 150, 150, 150 );
+    QString decoColorize = QStringLiteral( "Liquid Method" );
+    QString buttonsColorize = QStringLiteral( "Liquid Method" );
 
+    // buttons
+    bool useCustomButtonsColors = false;
+    bool customColorsActiveButtons = false;
+    bool customColorsInActiveButtons = false;
+    QColor cusBtnCol[ buttonTypeAllCount ];
 
+    // paths
+    QString framesPath;
+    QString buttonsPath;
+    QString masksPath;
+    bool useMasks = true;
+};
 
+// Theme ////////////////////////////////////////////////////////////////////
+// the images of the configured theme, shared by all decorations
+// (this replaces the KDE 4 DeKoratorFactory)
 
+class Theme
+{
+public:
+    static std::shared_ptr<Theme> self();
 
+    // re-read the configuration, returns true if anything changed
+    bool reconfigure();
 
+    const Settings &settings() const { return settings_; }
+    bool isValid() const { return titleSize > 0; }
 
+    QPixmap decoPixmap( decoType part, bool active, const QColor &titleBarColor );
+    QImage buttonImage( buttonTypeAll type, buttonState state, bool active, const QColor &buttonColor );
+    QSize buttonSize( buttonTypeAll type ) const;
+    QRegion maskedRegion( const QSize &size, bool withBottom ) const;
 
-// DeKoratorButton //////////////////////////////////////////////////////////////
+    static QImage colorizedImage( const QImage &image, const QColor &color, const QString &colorizeMethod );
 
-class DeKoratorButton : public QAbstractButton
+    int titleSize = 0;
+    int leftFrameSize = 0;
+    int rightFrameSize = 0;
+    int bottomFrameSize = 0;
+    int topLeftCornerWidth = 0;
+    int topRightCornerWidth = 0;
+
+private:
+    void loadPixmaps();
+    void determineSizes();
+
+    bool loaded_ = false;
+    Settings settings_;
+    QImage decoImage_[ decoCount ][ WindowActivationStateCount ];
+    QImage buttonImage_[ buttonTypeAllCount ][ buttonStateCount ][ WindowActivationStateCount ];
+    QRegion mask_[ maskCount ];
+    QSize maskSize_[ maskCount ];
+
+    // recolored images, keyed by the color they were colorized with
+    QHash<QRgb, QList<QPixmap>> decoCache_[ WindowActivationStateCount ];
+    QHash<QRgb, QList<QImage>> buttonCache_[ WindowActivationStateCount ];
+};
+
+// Decoration ///////////////////////////////////////////////////////////////
+
+class Decoration : public KDecoration3::Decoration
 {
     Q_OBJECT
 public:
-    explicit DeKoratorButton( DeKoratorClient *parent = 0, const char *name = 0,
-                     const QString &tip = NULL, ButtonType type = ButtonHelp, buttonTypeAll btnType = restore );
-    ~DeKoratorButton();
+    explicit Decoration( QObject *parent = nullptr, const QVariantList &args = QVariantList() );
+    ~Decoration() override;
 
-    void setPixmap( buttonTypeAll btnType );
-    QSize sizeHint() const;
-    Qt::MouseButton lastMousePress() const;
-    void reset();
+    bool init() override;
+    void paint( QPainter *painter, const QRectF &repaintArea ) override;
 
-protected slots:
+    Theme *theme() const { return theme_.get(); }
+    bool hideBorders() const;
+    QColor titleBarColor( bool active ) const;
+    QColor buttonColor( bool active ) const;
+
+private Q_SLOTS:
+    void reconfigure();
+    void recreateButtons();
+    void updateLayout();
+    void updateButtonsGeometry();
+
+private:
+    void updateCaptionBuffer();
+    QRect titleRect() const;
+    QRegion maskRegion() const;
+
+    std::shared_ptr<Theme> theme_;
+    KDecoration3::DecorationButtonGroup *leftButtons_ = nullptr;
+    KDecoration3::DecorationButtonGroup *rightButtons_ = nullptr;
+    bool captionBufferDirty_ = true;
+    QImage activeShadowImg_, inActiveShadowImg_;
+    mutable QRegion mask_;
+    mutable QSize maskSize_;
+    mutable bool maskWithBottom_ = false;
+};
+
+// Button ///////////////////////////////////////////////////////////////////
+
+class Button : public KDecoration3::DecorationButton
+{
+    Q_OBJECT
+public:
+    Button( KDecoration3::DecorationButtonType type, Decoration *decoration, QObject *parent = nullptr );
+
+    static KDecoration3::DecorationButton *create( KDecoration3::DecorationButtonType type, KDecoration3::Decoration *decoration, QObject *parent );
+
+    void paint( QPainter *painter, const QRectF &repaintArea ) override;
+    void updateSize();
+
+private Q_SLOTS:
+    void hoverChange( bool hovered );
     void animate();
 
 private:
-    void enterEvent( QEvent *e );
-    void leaveEvent( QEvent *e );
-    void mousePressEvent( QMouseEvent *e );
-    void mouseReleaseEvent( QMouseEvent *e );
-    void paintEvent( QPaintEvent *e );
-    QImage chooseRightHoverEffect( const QImage &img, QString res );
+    buttonTypeAll glyph() const;
+    QImage chooseRightHoverEffect( const QImage &image, const QString &effect ) const;
+    Decoration *deco() const;
 
-private:
-    int buttonWidth_;
-    DeKoratorClient *client_;
-    ButtonType type_;
-    Qt::MouseButton lastmouse_;
-    int decoPixHeight_;
-    bool hover_;
-    QTimer *animTmr;
-    uint animProgress;
-    buttonTypeAll btnType_;
-    int s;
+    QTimer *animTmr_;
+    int animProgress_ = 0;
+    int step_ = 0;
 };
-
-inline Qt::MouseButton DeKoratorButton::lastMousePress() const
-{
-    return lastmouse_;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-// DeKoratorClient //////////////////////////////////////////////////////////////
-
-class DeKoratorClient : public KDecoration
-{
-    Q_OBJECT
-public:
-    DeKoratorClient( KDecorationBridge *b, KDecorationFactory *f );
-    virtual ~DeKoratorClient();
-
-    virtual void init();
-
-    virtual void activeChange();
-    virtual void desktopChange();
-    virtual void captionChange();
-    virtual void iconChange();
-    virtual void maximizeChange();
-    virtual void shadeChange();
-
-    virtual void borders( int &l, int &r, int &t, int &b ) const;
-    virtual void resize( const QSize &size );
-    virtual QSize minimumSize() const;
-    virtual Position mousePosition( const QPoint &point ) const;
-
-private:
-    void addButtons( QBoxLayout* layout, const QString& buttons );
-
-    bool eventFilter( QObject *obj, QEvent *e );
-    void mouseDoubleClickEvent( QMouseEvent *e );
-    void wheelEvent( QWheelEvent *e );
-    void paintEvent( QPaintEvent *e );
-    void resizeEvent( QResizeEvent * );
-    void showEvent( QShowEvent * );
-    void doShape();
-    void updateCaptionBuffer();
-
-
-private slots:
-    void maxButtonPressed();
-    void menuButtonPressed();
-    void aboveButtonPressed();
-    void belowButtonPressed();
-    void shadeButtonPressed();
-    void keepAboveChange( bool );
-    void keepBelowChange( bool );
-    void menuButtonReleased();
-
-private:
-    DeKoratorButton *button[ ButtonTypeCount ];
-    QVBoxLayout *mainLayout_;
-    QHBoxLayout *titleLayout_ ;
-    QHBoxLayout *midLayout_;
-    QSpacerItem *leftTitleBarSpacer_, *titleBarSpacer_, *rightTitleBarSpacer_, *leftSpacer_, *rightSpacer_, *bottomSpacer_;
-    bool closing_;
-    bool captionBufferDirty_;
-    QImage activeShadowImg_, inActiveShadowImg_;
-    QRegion mask_;
-    bool sizeChanged;
-    QSize oldSize_;
-};
-
 
 } // namespace DeKorator
 

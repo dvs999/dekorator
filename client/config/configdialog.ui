@@ -12,7 +12,7 @@
   </property>
   <layout class="QVBoxLayout">
    <item>
-    <widget class="KTabWidget" name="tabWidget2">
+    <widget class="QTabWidget" name="tabWidget2">
      <property name="currentIndex">
       <number>0</number>
      </property>
@@ -402,7 +402,7 @@
              </widget>
             </item>
             <item>
-             <widget class="KComboBox" name="decoColorizeComboBox">
+             <widget class="QComboBox" name="decoColorizeComboBox">
               <item>
                <property name="text">
                 <string>Liquid Method</string>
@@ -435,7 +435,7 @@
              </widget>
             </item>
             <item>
-             <widget class="KComboBox" name="buttonsColorizeComboBox">
+             <widget class="QComboBox" name="buttonsColorizeComboBox">
               <item>
                <property name="text">
                 <string>Liquid Method</string>
@@ -560,7 +560,7 @@
            </property>
            <layout class="QVBoxLayout" name="_4">
             <item>
-             <widget class="KComboBox" name="animateEfeectsCombo">
+             <widget class="QComboBox" name="animateEfeectsCombo">
               <property name="enabled">
                <bool>false</bool>
               </property>
@@ -669,7 +669,7 @@
            </property>
            <layout class="QVBoxLayout" name="_6">
             <item>
-             <widget class="KComboBox" name="hoverTypeCombo">
+             <widget class="QComboBox" name="hoverTypeCombo">
               <item>
                <property name="text">
                 <string>To Gray</string>
@@ -1187,20 +1187,9 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>KComboBox</class>
-   <extends>QComboBox</extends>
-   <header>kcombobox.h</header>
-  </customwidget>
-  <customwidget>
    <class>KColorButton</class>
    <extends>QPushButton</extends>
-   <header>kcolorbutton.h</header>
-  </customwidget>
-  <customwidget>
-   <class>KTabWidget</class>
-   <extends>QTabWidget</extends>
-   <header>ktabwidget.h</header>
-   <container>1</container>
+   <header>KColorButton</header>
   </customwidget>
  </customwidgets>
  <resources/>

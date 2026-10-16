@@ -22,10 +22,10 @@
 #ifndef KTHEMESELECTOR_H
 #define KTHEMESELECTOR_H
 
-#include <QtGui/QWidget>
+#include <QWidget>
 
-class KComponentData;
-class KUrl;
+class KAboutData;
+class QPainter;
 class QStyleOptionViewItem;
 
 
@@ -73,7 +73,7 @@ class KThemeSelector : public QWidget
         void createClicked();
 
     public:
-        virtual QString installTheme(const KUrl &themeUrl);
+        virtual QString installTheme(const QUrl &themeUrl);
         virtual void addTheme(const QString &localPath);
         virtual bool removeTheme(const QString &localPath);
 
@@ -91,7 +91,7 @@ class KThemeSelector : public QWidget
         virtual QSize sizeHintThemeItem(const QStyleOptionViewItem *option,
                                         const QString &localPath, int viewMode) const;
         int viewMode() const;
-        void setup(const KComponentData &componentData);
+        void setup(const KAboutData &aboutData);
 
     private:
         class Private;

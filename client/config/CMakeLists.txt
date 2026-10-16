@@ -1,8 +1,22 @@
-set (kwin_deKorator_config_SOURCES deKoratorconfig.cc deKoratorthemes.cpp themes.cpp kthemeselector.cpp)
-kde4_add_ui_files (kwin_deKorator_config_SOURCES configdialog.ui kthemeselectorwidgets.ui)
+kcoreaddons_add_plugin(kcm_deKoratordecoration
+    SOURCES deKoratorconfig.cc deKoratorthemes.cpp themes.cpp kthemeselector.cpp
+    INSTALL_NAMESPACE "org.kde.kdecoration3.kcm"
+)
+ki18n_wrap_ui(kcm_deKoratordecoration configdialog.ui kthemeselectorwidgets.ui)
 
-kde4_add_plugin (kwin_deKorator_config ${kwin_deKorator_config_SOURCES})
-target_link_libraries (kwin_deKorator_config ${KDE4_KDEUI_LIBS} ${KDE4_KIO_LIBS} ${KDE4_KNEWSTUFF2_LIBS} ${KDE4_KNEWSTUFF3_LIBS})
+target_link_libraries(kcm_deKoratordecoration
+    KF6::Archive
+    KF6::ConfigGui
+    KF6::CoreAddons
+    KF6::I18n
+    KF6::KCMUtils
+    KF6::KIOCore
+    KF6::KIOWidgets
+    KF6::NewStuffWidgets
+    KF6::WidgetsAddons
+    KF6::XmlGui
+    Qt6::DBus
+    Qt6::Widgets
+)
 
-install (TARGETS kwin_deKorator_config DESTINATION ${PLUGIN_INSTALL_DIR})
-install (FILES deKoratorthemes.knsrc DESTINATION ${CONFIG_INSTALL_DIR})
+install(FILES deKoratorthemes.knsrc DESTINATION ${KDE_INSTALL_KNSRCDIR})

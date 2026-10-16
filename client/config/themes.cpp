@@ -32,34 +32,65 @@
 ///////////////////////////////////////////////////////////////////////
 
 
+
 #include "deKoratorthemes.h"
 
-#include <KDE/KApplication>
-#include <KDE/KLocale>
-#include <KDE/KMessageBox>
-#include <KDE/KProgressDialog>
-#include <KDE/KStandardDirs>
-#include <KDE/KTar>
+#include <KIO/StoredTransferJob>
+#include <KJobWidgets>
+#include <KLocalizedString>
+#include <KMessageBox>
+#include <KTar>
 
-#include <KDE/KIO/NetAccess>
+#include <QApplication>
+#include <QDir>
+#include <QProgressDialog>
+#include <QStandardPaths>
+#include <QTemporaryFile>
+
+#include <memory>
 
 
-QString deKoratorThemes::installTheme(const KUrl &themeURL)
+static QString localThemesDir()
+{
+    return QStandardPaths::writableLocation( QStandardPaths::GenericDataLocation ) + QLatin1String( "/deKorator/themes/" );
+}
+
+static const KArchiveDirectory *subDirectory( const KArchiveDirectory *dir, const QString &name )
+{
+    const KArchiveEntry *entry = dir->entry( name );
+    return entry && entry->isDirectory() ? static_cast<const KArchiveDirectory *>( entry ) : nullptr;
+}
+
+QString deKoratorThemes::installTheme(const QUrl &themeURL)
 {
     // themeTmpFile contains the name of the downloaded file
     QString themeTmpFile;
+    std::unique_ptr<QTemporaryFile> tmpFile;
     QWidget *parent_ = this;
 
-    if ( !KIO::NetAccess::download( themeURL, themeTmpFile, parent_ ) )
+    if ( themeURL.isLocalFile() )
     {
-        QString sorryText;
-        if ( themeURL.isLocalFile() )
-            sorryText = i18n( "Unable to find the deKorator theme archive %1.", themeURL.prettyUrl() );
-        else
-            sorryText = i18n( "Unable to download deKorator theme archive;\n"
-                    "please check that address %1 is correct.", themeURL.prettyUrl() );
-        KMessageBox::sorry( parent_, sorryText );
-        return QString();
+        themeTmpFile = themeURL.toLocalFile();
+        if ( !QFile::exists( themeTmpFile ) )
+        {
+            KMessageBox::error( parent_, i18n( "Unable to find the deKorator theme archive %1.", themeURL.toDisplayString() ) );
+            return QString();
+        }
+    }
+    else
+    {
+        KIO::StoredTransferJob *job = KIO::storedGet( themeURL );
+        KJobWidgets::setWindow( job, parent_ );
+        // keep the file name, so that the archive type can be detected
+        tmpFile = std::make_unique<QTemporaryFile>( QDir::tempPath() + QLatin1String( "/deKorator-XXXXXX-" ) + themeURL.fileName() );
+        if ( !job->exec() || !tmpFile->open() || tmpFile->write( job->data() ) != job->data().size() )
+        {
+            KMessageBox::error( parent_, i18n( "Unable to download deKorator theme archive;\n"
+                    "please check that address %1 is correct.", themeURL.toDisplayString() ) );
+            return QString();
+        }
+        tmpFile->close();
+        themeTmpFile = tmpFile->fileName();
     }
 
     //
@@ -68,8 +99,6 @@ QString deKoratorThemes::installTheme(const KUrl &themeURL)
     {
         QString invalidArch( i18n( "The file is not a valid deKorator theme archive." ) );
         KMessageBox::error( parent_, invalidArch );
-
-        KIO::NetAccess::removeTempFile( themeTmpFile );
         return QString();
     }
 
@@ -83,52 +112,44 @@ QString deKoratorThemes::installTheme(const KUrl &themeURL)
         KMessageBox::error( parent_, somethingWrong );
     }
 
-    KIO::NetAccess::removeTempFile( themeTmpFile );
-
     rescanThemes();
 
-    QString localThemesDir = KStandardDirs::locateLocal("data", "deKorator/themes/");
-    return localThemesDir + themesNames.at( 0 );
+    return localThemesDir() + themesNames.at( 0 );
 }
 
 bool deKoratorThemes::installThemes( const QStringList &themes, const QString &archiveName )
 {
     bool everythingOk = true;
-    QString localThemesDir = KStandardDirs::locateLocal("data", "deKorator/themes/");
+    const QString themesDir = localThemesDir();
 
-    if (localThemesDir.isEmpty()) {
+    if ( !QDir().mkpath( themesDir ) ) {
         return false;
     }
     //
-    KProgressDialog progressDiag( this );//, "themeinstallprogress",
-                                /*  i18n( "Installing icon themes" ),
-                                  QString::null,
-                                  true );*/
+    QProgressDialog progressDiag( this );
     progressDiag.setAutoClose( true );
-    progressDiag.progressBar() ->setRange(0, themes.count() );
+    progressDiag.setRange( 0, themes.count() );
     progressDiag.show();
 
     KTar archive( archiveName );
-    archive.open( QIODevice::ReadOnly );
-    kapp->processEvents();
+    if ( !archive.open( QIODevice::ReadOnly ) )
+        return false;
+    QApplication::processEvents();
 
     const KArchiveDirectory* rootDir = archive.directory();
 
-    KArchiveDirectory* currentTheme;
-    for ( QStringList::ConstIterator it = themes.begin(); it != themes.end(); ++it )
+    for ( const QString &theme : themes )
     {
         progressDiag.setLabelText(
-            i18n( "<qt>Installing <strong>%1</strong> theme</qt>", *it )
+            i18n( "<qt>Installing <strong>%1</strong> theme</qt>", theme )
             );
-        kapp->processEvents();
+        QApplication::processEvents();
 
-        if ( progressDiag.wasCancelled() )
+        if ( progressDiag.wasCanceled() )
             break;
 
-        currentTheme = dynamic_cast<KArchiveDirectory*>(
-                           const_cast<KArchiveEntry*>(
-                               rootDir->entry( *it ) ) );
-        if ( currentTheme == NULL )
+        const KArchiveDirectory *currentTheme = subDirectory( rootDir, theme );
+        if ( !currentTheme || !currentTheme->copyTo( themesDir + theme ) )
         {
             // we tell back that something went wrong, but try to install as much
             // as possible
@@ -136,8 +157,7 @@ bool deKoratorThemes::installThemes( const QStringList &themes, const QString &a
             continue;
         }
 
-        currentTheme->copyTo( localThemesDir + *it );
-	progressDiag.progressBar() ->setValue(progressDiag.progressBar() ->value() + 1 );
+        progressDiag.setValue( progressDiag.value() + 1 );
     }
 
     archive.close();
@@ -149,28 +169,20 @@ QStringList deKoratorThemes::findThemeDirs( const QString &archiveName )
     QStringList foundThemes;
 
     KTar archive( archiveName );
-    archive.open( QIODevice::ReadOnly );
+    if ( !archive.open( QIODevice::ReadOnly ) )
+        return foundThemes;
     const KArchiveDirectory* themeDir = archive.directory();
 
-    KArchiveEntry* possibleDir = 0L;
-    KArchiveDirectory* subDir = 0L;
-
-    // iterate all the dirs looking for an index.theme or index.desktop file
-    QStringList entries = themeDir->entries();
-    for ( QStringList::Iterator it = entries.begin(); it != entries.end(); ++it )
+    // iterate all the dirs looking for deco and buttons directories
+    const QStringList entries = themeDir->entries();
+    for ( const QString &name : entries )
     {
-        QString name = ( QString ) * it;
-
-        possibleDir = const_cast<KArchiveEntry*>( themeDir->entry( *it ) );
-        if ( possibleDir->isDirectory() )
+        const KArchiveDirectory *subDir = subDirectory( themeDir, name );
+        if ( subDir
+            && ( ( subDir->entry( QStringLiteral( "deco" ) ) || subDir->entry( QStringLiteral( "Deco" ) ) )
+            && ( subDir->entry( QStringLiteral( "buttons" ) ) || subDir->entry( QStringLiteral( "Buttons" ) ) ) ) )
         {
-            subDir = dynamic_cast<KArchiveDirectory*>( possibleDir );
-            if ( subDir
-                && ( ( subDir->entry( "deco" ) || subDir->entry( "Deco" ) )
-                && ( subDir->entry( "buttons" ) || subDir->entry( "Buttons" ) ) ) )
-            {
-                foundThemes.append( subDir->name() );
-            }
+            foundThemes.append( subDir->name() );
         }
     }
 
@@ -178,4 +190,3 @@ QStringList deKoratorThemes::findThemeDirs( const QString &archiveName )
 
     return foundThemes;
 }
-

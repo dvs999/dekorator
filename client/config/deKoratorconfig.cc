@@ -34,12 +34,47 @@
 
 #include "deKoratorconfig.h"
 
-#include <KDE/KConfigGroup>
-#include <KDE/KLocale>
+#include <KColorButton>
+#include <KConfigGroup>
+#include <KLocalizedString>
+#include <KPluginFactory>
 
-#include <QtCore/QDir>
+#include <QCheckBox>
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDir>
+#include <QGroupBox>
+#include <QRadioButton>
+#include <QSpinBox>
+#include <QVBoxLayout>
 
 #include "deKoratorthemes.h"
+
+K_PLUGIN_CLASS_WITH_JSON( DeKoratorConfig, "kcm_deKoratordecoration.json" )
+
+
+// The combo boxes store these untranslated keys, in the order of their items
+static const char * const colorizeMethods[] = { "Liquid Method", "KDE Method", "Hue Adjustment", nullptr };
+static const char * const animationTypes[] = { "Intensity", "Blend", "Solarize", "Fade", "Trashed", "Hue Shift", nullptr };
+static const char * const hoverTypes[] = { "To Gray", "Colorize", "DeSaturate", "To Gamma", "Use Image Colors", nullptr };
+
+static void setComboKey( QComboBox *combo, const char * const keys[], const QString &key )
+{
+    for ( int i = 0; keys[ i ]; ++i )
+    {
+        if ( key == QLatin1String( keys[ i ] ) )
+        {
+            combo->setCurrentIndex( i );
+            return;
+        }
+    }
+    combo->setCurrentIndex( 0 );
+}
+
+static QString comboKey( const QComboBox *combo, const char * const keys[] )
+{
+    return QLatin1String( keys[ qMax( 0, combo->currentIndex() ) ] );
+}
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -47,105 +82,40 @@
 // -------------
 // Constructor
 
-DeKoratorConfig::DeKoratorConfig( KConfig* /*config*/, QWidget* parent )
-        : QObject( parent ), config_( 0 ), dialog_( 0 )
+DeKoratorConfig::DeKoratorConfig( QObject *parent, const KPluginMetaData &data )
+        : KCModule( parent, data ), config_( KSharedConfig::openConfig( QStringLiteral( "kwindeKoratorrc" ) ) ), m_themes( nullptr ), dialog_( nullptr )
 {
-    // create the configuration object
-    config_ = new KConfig( "kwindeKoratorrc" );
-    KGlobal::locale()->insertCatalog( "kwin3_deKorator" );
-
-
-
     // create and show the configuration dialog
-    dialog_ = new ConfigDialog( parent );
+    dialog_ = new ConfigDialog( widget() );
+    QVBoxLayout *layout = new QVBoxLayout( widget() );
+    layout->setContentsMargins( 0, 0, 0, 0 );
+    layout->addWidget( dialog_ );
 
-    m_themes = new deKoratorThemes(dialog_);
-    m_themes->layout()->setMargin(-1);
-    dialog_->tabWidget2->insertTab(0, m_themes, i18n("Themes"));
-    dialog_->tabWidget2->setCurrentIndex(0);
-    dialog_->show();
+    // KWin itself handles double clicks on the menu button now
+    dialog_->dblClkCloseChkBox->hide();
 
-    // load the configuration
-    load( KConfigGroup() );
+    // setup the connections, any change of an option enables the Apply button
+    auto changed = [this] { markAsChanged(); };
+    for ( QCheckBox *box : dialog_->findChildren<QCheckBox *>() )
+        connect( box, &QCheckBox::toggled, this, changed );
+    for ( QRadioButton *button : dialog_->findChildren<QRadioButton *>() )
+        connect( button, &QRadioButton::toggled, this, changed );
+    for ( QGroupBox *box : dialog_->findChildren<QGroupBox *>() )
+        if ( box->isCheckable() )
+            connect( box, &QGroupBox::toggled, this, changed );
+    for ( QSpinBox *box : dialog_->findChildren<QSpinBox *>() )
+        connect( box, &QSpinBox::valueChanged, this, changed );
+    for ( QComboBox *box : dialog_->findChildren<QComboBox *>() )
+        connect( box, &QComboBox::currentIndexChanged, this, changed );
+    for ( KColorButton *button : dialog_->findChildren<KColorButton *>() )
+        connect( button, &KColorButton::changed, this, changed );
 
-    // setup the connections
-
-    // misc
-    QList<QRadioButton *> buttons = dialog_->titlealign->findChildren<QRadioButton *>();
-    foreach (QRadioButton *button, buttons) {
-        connect( button, SIGNAL( clicked() ), this, SIGNAL( changed() ) );
-    }
-    connect( dialog_->useMenuImageChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-	connect( dialog_->ignoreAppIcnCol, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->dblClkCloseChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->showBtmBorderChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->showMaximizedBordersChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->ignoreMasksChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->useShdtextChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->activeShdtextXSpinBox, SIGNAL( valueChanged( int ) ), SIGNAL( changed() ) );
-    connect( dialog_->activeShdtextYSpinBox, SIGNAL( valueChanged( int ) ), SIGNAL( changed() ) );
-    connect( dialog_->activeShdColBtn, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->inActiveShdtextXSpinBox, SIGNAL( valueChanged( int ) ), SIGNAL( changed() ) );
-    connect( dialog_->inActiveShdtextYSpinBox, SIGNAL( valueChanged( int ) ), SIGNAL( changed() ) );
-    connect( dialog_->inActiveShdColBtn, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->inActiveShdColBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->btnShiftXSpinBox, SIGNAL( valueChanged( int ) ), SIGNAL( changed() ) );
-    connect( dialog_->btnShiftYSpinBox, SIGNAL( valueChanged( int ) ), SIGNAL( changed() ) );
-
-
-    // colors
-    connect( dialog_->colorizeActFramesChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->colorizeActButtonsChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->colorizeInActFramesChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->colorizeInActButtonsChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->useAnimChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->animateEfeectsCombo, SIGNAL( activated( const QString& ) ), SIGNAL( changed() ) );
-
-    connect( dialog_->stepsSpinBox, SIGNAL( valueChanged( int ) ), SIGNAL( changed() ) );
-    connect( dialog_->intervalSpinBox, SIGNAL( valueChanged( int ) ), SIGNAL( changed() ) );
-    connect( dialog_->KeepAnimateChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-
-    connect( dialog_->hoverTypeCombo, SIGNAL( activated( const QString& ) ), SIGNAL( changed() ) );
-    connect( dialog_->effectsAmount_SpinBox, SIGNAL( valueChanged( int ) ), SIGNAL( changed() ) );
-    connect( dialog_->activeHighlightClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->inActiveHighlightClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->decoColorizeComboBox, SIGNAL( activated( const QString& ) ), SIGNAL( changed() ) );
-    connect( dialog_->buttonsColorizeComboBox, SIGNAL( activated( const QString& ) ), SIGNAL( changed() ) );
-    //  connect( dialog_->buttonsHoverColorizeComboBox, SIGNAL( activated( const QString& ) ), SIGNAL( changed() ) );
-
-    // buttons
-    connect( dialog_->useCusBtnClrChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->cusColActBtnChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-    connect( dialog_->cusColInActBtnChkBox, SIGNAL( clicked() ), SIGNAL( changed() ) );
-
-    connect( dialog_->closeClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->minClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->maxClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->restoreClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->helpClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->menuClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->stickyClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->stickyDownClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->aboveClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->aboveDownClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->belowClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->belowDownClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->shadeClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-    connect( dialog_->shadeDownClrBtn, SIGNAL( clicked( ) ), SIGNAL( changed() ) );
-
-    // path's
-    connect( m_themes, SIGNAL( themeSelected() ), SIGNAL( changed() ) );
-}
-
-//////////////////////////////////////////////////////////////////////////////
-// ~DeKoratorConfig()
-// --------------
-// Destructor
-
-DeKoratorConfig::~DeKoratorConfig()
-{
-    if ( dialog_ ) delete dialog_;
-    if ( config_ ) delete config_;
+    // themes (added after the connections above, its own widgets are not options)
+    m_themes = new deKoratorThemes( dialog_ );
+    m_themes->layout()->unsetContentsMargins();
+    dialog_->tabWidget2->insertTab( 0, m_themes, i18n( "Themes" ) );
+    dialog_->tabWidget2->setCurrentIndex( 0 );
+    connect( m_themes, &KThemeSelector::themeSelected, this, changed );
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -153,14 +123,15 @@ DeKoratorConfig::~DeKoratorConfig()
 // ------
 // Load configuration data
 
-void DeKoratorConfig::load( const KConfigGroup & )
+void DeKoratorConfig::load()
 {
-    KConfig *conf = this->config_;
+    config_->reparseConfiguration();
+    KConfig *conf = this->config_.data();
     // misc
     KConfigGroup *config_; KConfigGroup groupMisc(conf, "MISC" ); config_ = &groupMisc;
 
     QString value = config_->readEntry( "TitleAlignment", "AlignHCenter" );
-    QRadioButton *button = ( QRadioButton* ) dialog_->titlealign->findChild<QRadioButton *>( value );
+    QRadioButton *button = dialog_->titlealign->findChild<QRadioButton *>( value );
     if ( button ) button->setChecked( true );
     dialog_->useMenuImageChkBox->setChecked( config_->readEntry( "UseMenuImage", false ) );
 	dialog_->ignoreAppIcnCol->setChecked( config_->readEntry( "IgnoreAppIconCol", false ) );
@@ -188,7 +159,7 @@ void DeKoratorConfig::load( const KConfigGroup & )
     dialog_->colorizeInActFramesChkBox->setChecked( config_->readEntry( "ColorizeInActFrames", false ) );
     dialog_->colorizeInActButtonsChkBox->setChecked( config_->readEntry( "ColorizeInActButtons", false ) );
     dialog_->useAnimChkBox->setChecked( config_->readEntry( "UseAnimation", false ) );
-    dialog_->animateEfeectsCombo->setCurrentIndex( dialog_->animateEfeectsCombo->findText( config_->readEntry( "AnimationType", "Intensity" ) ) );
+    setComboKey( dialog_->animateEfeectsCombo, animationTypes, config_->readEntry( "AnimationType", "Intensity" ) );
 
     dialog_->stepsSpinBox->setValue( config_->readEntry( "AnimSteps", 5 ) );
     dialog_->intervalSpinBox->setValue( config_->readEntry( "AnimInterval", 30 ) );
@@ -196,10 +167,10 @@ void DeKoratorConfig::load( const KConfigGroup & )
 
     dialog_->activeHighlightClrBtn->setColor( config_->readEntry( "ActiveHighlightColor", color ) );
     dialog_->inActiveHighlightClrBtn->setColor( config_->readEntry( "InActiveHighlightColor", color ) );
-    dialog_->hoverTypeCombo->setCurrentIndex( dialog_->hoverTypeCombo->findText( config_->readEntry( "ButtonsHoverType", "To Gray" ) ) );
+    setComboKey( dialog_->hoverTypeCombo, hoverTypes, config_->readEntry( "ButtonsHoverType", "To Gray" ) );
     dialog_->effectsAmount_SpinBox->setValue( config_->readEntry( "EffectAmount", 5 ) );
-    dialog_->decoColorizeComboBox->setCurrentIndex( dialog_->decoColorizeComboBox->findText( config_->readEntry( "DecoColorize", "Liquid Method" ) ) );
-    dialog_->buttonsColorizeComboBox->setCurrentIndex( dialog_->buttonsColorizeComboBox->findText( config_->readEntry( "ButtonsColorize", "Liquid Method" ) ) );
+    setComboKey( dialog_->decoColorizeComboBox, colorizeMethods, config_->readEntry( "DecoColorize", "Liquid Method" ) );
+    setComboKey( dialog_->buttonsColorizeComboBox, colorizeMethods, config_->readEntry( "ButtonsColorize", "Liquid Method" ) );
     //  dialog_->buttonsHoverColorizeComboBox->setCurrentText( config_->readEntry( "ButtonsHoverColorize", "Liquid Method" ) );
 
     // buttons
@@ -229,8 +200,12 @@ void DeKoratorConfig::load( const KConfigGroup & )
     QString themePath = config_->readEntry( "FramesPath", "" );
     if ( themePath.endsWith( QLatin1String( "/deco" ) ) || themePath.endsWith( QLatin1String( "/Deco") ) ) {
         themePath.chop( 5 );
+        // loading is not a change
+        QSignalBlocker blocker( m_themes );
         m_themes->setSelectedTheme( themePath );
     }
+
+    setNeedsSave( false );
 }
 
 static QString themePath(const QString &localPath, const QString &dirName)
@@ -251,9 +226,9 @@ static QString themePath(const QString &localPath, const QString &dirName)
 // ------
 // Save configuration data
 
-void DeKoratorConfig::save( KConfigGroup & )
+void DeKoratorConfig::save()
 {
-    KConfig *conf = this->config_;
+    KConfig *conf = this->config_.data();
     // misc
     KConfigGroup *config_; KConfigGroup groupMisc(conf, "MISC" ); config_ = &groupMisc;
 
@@ -290,18 +265,18 @@ void DeKoratorConfig::save( KConfigGroup & )
     config_->writeEntry( "ColorizeInActFrames", dialog_->colorizeInActFramesChkBox->isChecked() );
     config_->writeEntry( "ColorizeInActButtons", dialog_->colorizeInActButtonsChkBox->isChecked() );
     config_->writeEntry( "UseAnimation", dialog_->useAnimChkBox->isChecked() );
-    config_->writeEntry( "AnimationType", dialog_->animateEfeectsCombo->currentText() );
+    config_->writeEntry( "AnimationType", comboKey( dialog_->animateEfeectsCombo, animationTypes ) );
 
     config_->writeEntry( "AnimSteps", dialog_->stepsSpinBox->value() );
     config_->writeEntry( "AnimInterval", dialog_->intervalSpinBox->value() );
     config_->writeEntry( "KeepAnimating", dialog_->KeepAnimateChkBox->isChecked() );
 
-    config_->writeEntry( "ButtonsHoverType", dialog_->hoverTypeCombo->currentText() );
+    config_->writeEntry( "ButtonsHoverType", comboKey( dialog_->hoverTypeCombo, hoverTypes ) );
     config_->writeEntry( "EffectAmount", dialog_->effectsAmount_SpinBox->value() );
     config_->writeEntry( "ActiveHighlightColor", dialog_->activeHighlightClrBtn->color() );
     config_->writeEntry( "InActiveHighlightColor", dialog_->inActiveHighlightClrBtn->color() );
-    config_->writeEntry( "DecoColorize", dialog_->decoColorizeComboBox->currentText() );
-    config_->writeEntry( "ButtonsColorize", dialog_->buttonsColorizeComboBox->currentText() );
+    config_->writeEntry( "DecoColorize", comboKey( dialog_->decoColorizeComboBox, colorizeMethods ) );
+    config_->writeEntry( "ButtonsColorize", comboKey( dialog_->buttonsColorizeComboBox, colorizeMethods ) );
     //  config_->writeEntry( "ButtonsHoverColorize", dialog_->buttonsHoverColorizeComboBox->currentText() );
 
     // buttons
@@ -345,6 +320,12 @@ void DeKoratorConfig::save( KConfigGroup & )
     }
 #endif
     config_->sync();
+
+    // tell KWin to reload the decoration settings
+    QDBusMessage message = QDBusMessage::createSignal( QStringLiteral( "/KWin" ), QStringLiteral( "org.kde.KWin" ), QStringLiteral( "reloadConfig" ) );
+    QDBusConnection::sessionBus().send( message );
+
+    setNeedsSave( false );
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -357,7 +338,7 @@ void DeKoratorConfig::defaults()
 
     // misc
     QRadioButton * button =
-        ( QRadioButton* ) dialog_->titlealign->findChild<QRadioButton *>( "AlignHCenter" );
+        dialog_->titlealign->findChild<QRadioButton *>( "AlignHCenter" );
     if ( button ) button->setChecked( true );
     dialog_->useMenuImageChkBox->setChecked( false );
 	dialog_->ignoreAppIcnCol->setChecked( false );
@@ -381,18 +362,18 @@ void DeKoratorConfig::defaults()
     dialog_->colorizeInActFramesChkBox->setChecked( false );
     dialog_->colorizeInActButtonsChkBox->setChecked( false );
     dialog_->useAnimChkBox->setChecked( false );
-    dialog_->animateEfeectsCombo->setCurrentIndex( dialog_->animateEfeectsCombo->findText( "Intensity" ) );
+    dialog_->animateEfeectsCombo->setCurrentIndex( 0 );
 
     dialog_->stepsSpinBox->setValue( 5 );
     dialog_->intervalSpinBox->setValue( 30 );
     dialog_->KeepAnimateChkBox->setChecked( false );
 
-    dialog_->hoverTypeCombo->setCurrentIndex( dialog_->hoverTypeCombo->findText( "To Gray" ) );
+    dialog_->hoverTypeCombo->setCurrentIndex( 0 );
     dialog_->effectsAmount_SpinBox->setValue( 5 );
     dialog_->activeHighlightClrBtn->setColor( QColor( 150, 150, 150 ) );
     dialog_->inActiveHighlightClrBtn->setColor( QColor( 150, 150, 150 ) );
-    dialog_->decoColorizeComboBox->setCurrentIndex( dialog_->decoColorizeComboBox->findText( "Liquid Method" ) );
-    dialog_->buttonsColorizeComboBox->setCurrentIndex( dialog_->buttonsColorizeComboBox->findText( "Liquid Method" ) );
+    dialog_->decoColorizeComboBox->setCurrentIndex( 0 );
+    dialog_->buttonsColorizeComboBox->setCurrentIndex( 0 );
     //  dialog_->buttonsHoverColorizeComboBox->setCurrentText( "Liquid Method" );
 
     // buttons
@@ -413,18 +394,6 @@ void DeKoratorConfig::defaults()
     dialog_->belowDownClrBtn->setColor( QColor( 150, 150, 150 ) );
     dialog_->shadeClrBtn->setColor( QColor( 150, 150, 150 ) );
     dialog_->shadeDownClrBtn->setColor( QColor( 150, 150, 150 ) );
-}
-
-//////////////////////////////////////////////////////////////////////////////
-// Plugin Stuff                                                             //
-//////////////////////////////////////////////////////////////////////////////
-
-extern "C"
-{
-    KDE_EXPORT QObject * allocate_config( KConfig * config, QWidget * parent )
-    {
-        return ( new DeKoratorConfig( config, parent ) );
-    }
 }
 
 #include "deKoratorconfig.moc"
