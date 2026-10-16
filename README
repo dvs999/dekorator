@@ -2,7 +2,8 @@ deKorator - themable window decoration for KDE Plasma 6
 =======================================================
 
 This is the Plasma 6 (Qt 6 / KDE Frameworks 6 / KDecoration3) port of
-deKorator. For the history of the project see README.original and ChangeLog.
+deKorator - vibe coded/ported with Claude. For the history of the project
+see README.original and ChangeLog.
 
 Requirements
 ------------
